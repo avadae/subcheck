@@ -5,9 +5,9 @@ A tool to automatically check some basic things on student submission files for 
 Run publish.ps1 in powershell to create a build
 
 # use
-drag a zip file containing your submission onto the generated subcheck.exe
-- a config.xml will be generated containing the default configuration, you might want to tweak this
-- your zip file will be unzipped in the same folder and the contents analyzed.
+Drag a zip file containing your submission onto the generated subcheck.exe
+- A config.xml will be generated containing the default configuration, you might want to tweak this
+- Your zip file will be unzipped in the same folder and the contents analyzed.
 
 Things that are checked (non exhaustive):
 - file is a zip file
