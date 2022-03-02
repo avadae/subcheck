@@ -72,7 +72,7 @@ namespace SubCheck
 
 			SolutionFile solution = null;
 			string solutionFileName = null;
-			string zipDirectoryName = Path.GetFileNameWithoutExtension(filename);
+			string zipDirectoryName = Path.GetDirectoryName(filename) + "/SubCheck/" + Path.GetFileName(filename);
 
 			try
 			{
