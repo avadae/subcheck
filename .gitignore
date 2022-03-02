@@ -452,3 +452,11 @@ $RECYCLE.BIN/
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+#custom
+*.exe
+*.zip
+*.log
+*.sln
+config.xml
+Properties/LaunchSettings.json
