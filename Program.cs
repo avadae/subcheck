@@ -73,14 +73,16 @@ namespace SubCheck
 			SolutionFile solution = null;
 			string solutionFileName = null;
 			string zipDirectoryName = Path.GetFileNameWithoutExtension(filename);
+			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport)
+				zipDirectoryName = Path.Combine(Path.GetTempPath(),"subcheck",zipDirectoryName);
 
 			try
 			{
 				ZipFile.ExtractToDirectory(filename, zipDirectoryName, true);
 
 				var files = Directory.GetFiles(zipDirectoryName, "*.sln", SearchOption.AllDirectories);
-				nbIssues += Assert(files.Length == 1, "Found one solution");
-				if (files.Length > 0)
+				nbIssues += Assert(files.Length == 1, "Found exactly one solution", $" - found {files.Length} solutions.");
+				if (files.Length > 0) // let's assume the first one is the correct one.
 				{
 					solutionFileName = files[0];
 					var solutionDirectoryName = Path.GetDirectoryName(solutionFileName);
@@ -166,6 +168,9 @@ namespace SubCheck
 					}
 				}
 			}
+
+			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport && Directory.Exists(zipDirectoryName))
+				Directory.Delete(zipDirectoryName,true);
 
 			Console.WriteLine("Done, press a key to close.");
 			Console.ReadKey();
@@ -264,11 +269,11 @@ namespace SubCheck
 						  Regex.IsMatch(filename, config.SubmissionRegex), "File name");
 		}
 
-		private static int Assert(bool value, string desc)
+		private static int Assert(bool value, string desc, string reason = null)
 		{
 			if (value)
 				return Success(desc);
-			return Fail(desc);
+			return Fail(desc, reason);
 		}
 
 		private static int Success(string desc)
@@ -280,11 +285,12 @@ namespace SubCheck
 			return 0;
 		}
 
-		private static int Fail(string desc)
+		private static int Fail(string desc, string reason = null)
 		{
 			Console.Write($"{desc}....");
 			Console.ForegroundColor = ConsoleColor.Red;
-			Console.WriteLine("NOK");
+			Console.Write("NOK");
+			Console.WriteLine(reason);
 			Console.ResetColor();
 			return 1;
 		}

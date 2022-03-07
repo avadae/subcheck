@@ -11,5 +11,6 @@ namespace SubCheck
 		public bool OpenVSAfterReport { get; set; }
 		public int SolutionMajorVersionNumber { get; set; } = 17;
 		public string PlatformToolsetVersion { get; set; } = "v143";
+		public bool UseTempFolderForAnalysis { get; set; } = true;
 	}
 }
