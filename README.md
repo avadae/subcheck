@@ -15,9 +15,9 @@ Things that are checked (non exhaustive):
 - zip contains a vs2022 sln file
 - zip contains only one sln file
 - verifies that the folders are clean - no intermediate build output or .vs folders
-- verifies that for each build target
+- verifies that for each build target:
     - the platform toolset is v143 (vs2022)
-    - the warning level is set to 4 (if not it, changes that)
-    - warnings are treaded as errors (if not it changes that)
+    - the warning level is set to 4 (if not it changes that)
+    - warnings are treated as errors (if not it changes that)
 - if enabled, it will build all build targets
-- if enabled it will open the solution
+- if enabled, it will open the solution
