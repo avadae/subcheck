@@ -30,7 +30,7 @@ namespace SubCheck
 
 			// concatenate all the args, because it's probably a filepath containing spaces that was given.
 			string totalArgs = args[0];
-			for(int i = 1; i < args.Length; i++)
+			for (int i = 1; i < args.Length; i++)
 				totalArgs += " " + args[i];
 
 			var filename = Path.GetFullPath(totalArgs);
@@ -67,6 +67,11 @@ namespace SubCheck
 			}
 			#endregion
 
+			PerformAnalysis(filename, config);
+		}
+
+		public static void PerformAnalysis(string filename, Config config)
+		{
 			Console.WriteLine($"Analyzing {filename}");
 			int nbIssues = CheckName(filename);
 
@@ -203,7 +208,7 @@ namespace SubCheck
 					idg.Condition.Contains(configuration.EvaluatedInclude)))
 				{
 					var clCompileElement = projectItemDefinitionGroupElement.ItemDefinitions.First(item => item.ItemType == "ClCompile");
-					var warningLevel = clCompileElement.Metadata.First(item => item.ElementName == "WarningLevel");
+					var warningLevel = clCompileElement.Metadata.FirstOrDefault(item => item.ElementName == "WarningLevel");
 					if (warningLevel != null && Assert(warningLevel.Value == "Level4", "\t\tWarning Level 4") > 0)
 					{
 						nbIssues++;
