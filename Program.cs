@@ -147,8 +147,8 @@ namespace SubCheck
 							ProcessStartInfo startInfo = new ProcessStartInfo(config.DevenvPath);
 							startInfo.Arguments =
 								$"\"{Path.GetFullPath(solutionFileName)}\" " +
-								$"/Rebuild {configuration.FullName} " +
-								$"/Out {logFilename}";
+								$"/Rebuild \"{configuration.FullName}\" " +
+								$"/Out \"{logFilename}\"";
 							var process = Process.Start(startInfo);
 							process.WaitForExit();
 
@@ -183,8 +183,15 @@ namespace SubCheck
 
 		private static string GetBuildResult(string logFileName)
 		{
-			return File.ReadLines(logFileName).First(s =>
-				Regex.Match(s, "^=+ Rebuild All: \\d succeeded, \\d failed, \\d skipped =+").Success);
+			try
+			{
+				return File.ReadLines(logFileName).First(s =>
+					Regex.Match(s, "^=+ Rebuild All: \\d succeeded, \\d failed, \\d skipped =+").Success);
+			}
+			catch(InvalidOperationException ioe)
+			{
+				return $"Rebuild All failed: {ioe.Message}";
+			}
 		}
 
 		private static int AnalyzeProject(Project project)
