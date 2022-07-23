@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <StartupObject>SubCheck.Program</StartupObject>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
