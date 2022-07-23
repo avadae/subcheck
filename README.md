@@ -1,6 +1,8 @@
 # SubCheck
 A tool to automatically check some basic things on student submission files for the course Programming 4 at DAE
 
+[![Build Status](https://github.com/avadae/subcheck/actions/workflows/dotnet.yml/badge.svg)](https://github.com/avadae/subcheck/actions)
+
 # Build
 Run publish.ps1 in powershell to create a build
 
