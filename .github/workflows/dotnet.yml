@@ -1,4 +1,4 @@
-name: .NET
+name: Build
 
 on:
   push:
@@ -16,11 +16,18 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v2
       with:
-        dotnet-version: 6.0.x
+        dotnet-version: 5.0.x
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --no-restore
-      #run: dotnet publish -r win-x64 -p:PublishTrimmed=True -p:TrimMode=CopyUsed -c Release /p:PublishSingleFile=true "./SubCheck.csproj"
+      run: dotnet build  --configuration Release --no-restore
     - name: Test
       run: dotnet test --no-build --verbosity normal
+    - name: Publish
+      run: dotnet publish -r win-x64 -p:PublishTrimmed=True -p:TrimMode=CopyUsed -c Release /p:PublishSingleFile=true "./SubCheck.csproj"
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: Executable
+        path: .\bin\Release\net5.0\win-x64\publish\subcheck.exe
+
