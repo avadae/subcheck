@@ -29,5 +29,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Executable
-        path: ./bin/Release/net5.0/win-x64/publish/subcheck.exe
+        path: ./subcheck/bin/Release/net5.0/win-x64/publish/subcheck.exe
 
