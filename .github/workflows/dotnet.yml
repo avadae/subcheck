@@ -24,7 +24,7 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal
     - name: Publish
-      run: dotnet publish -r win-x64 -p:PublishTrimmed=True -p:TrimMode=CopyUsed -c Release /p:PublishSingleFile=true "./SubCheck.csproj"
+      run: dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true "./SubCheck.csproj"
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
       with:
