@@ -29,5 +29,5 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: Executable
-        path: ${{ github.workspace }}/bin/Release/net5.0/win-x64/publish/
+        path: ${{ github.workspace }}/bin/Release/net5.0/win-x64/publish/SubCheck.exe
 
