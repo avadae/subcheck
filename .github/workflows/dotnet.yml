@@ -19,12 +19,14 @@ jobs:
         dotnet-version: 6.0.x
     - name: Restore dependencies
       run: dotnet restore
-    - name: Build
-      run: dotnet build  --configuration Release --no-restore
-    - name: Test
-      run: dotnet test --no-build --verbosity normal
-    - name: Publish
-      run: dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true "./SubCheck.csproj"
+    - name: Build & Publish
+      uses: Amadevus/pwsh-script@v2
+      id: publish-script
+      with:
+        script: |
+          $gitversion = dotnet-gitversion | ConvertFrom-Json 
+          setversion $gitversion.AssemblySemVer
+          dotnet publish -r win-x64 -c Release /p:PublishSingleFile=true "subcheck.csproj" 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
       with:
