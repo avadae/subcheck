@@ -239,6 +239,9 @@ namespace SubCheck
 						if (config.BuildAfterReport)
 							clCompileElement.AddMetadata("TreatWarningAsError", "true");
 					}
+
+					var languageStandard = clCompileElement.Metadata.FirstOrDefault(item => item.ElementName == "LanguageStandard");
+					nbIssues += Assert(languageStandard != null && languageStandard.Value == "stdcpp20", "\t\tC++ Language Standard is c++20");
 				}
 			}
 
