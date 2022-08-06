@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Definition;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Locator;
 
 namespace SubCheck
 {
@@ -19,6 +20,8 @@ namespace SubCheck
 		private static void Main(string[] args)
 		{
 			Console.WriteLine($"Submission Checker v{Assembly.GetExecutingAssembly().GetName().Version}");
+
+			MSBuildLocator.RegisterDefaults();
 
 			#region validate input
 			if (args.Length == 0)
@@ -108,7 +111,8 @@ namespace SubCheck
 
 						ProjectOptions options = new ProjectOptions
 						{
-							LoadSettings = ProjectLoadSettings.IgnoreMissingImports
+							LoadSettings = ProjectLoadSettings.IgnoreMissingImports,
+							
 						};
 						var project = Project.FromFile(projectPath, options);
 
@@ -203,46 +207,34 @@ namespace SubCheck
 			{
 				Console.WriteLine($"\tConfiguration {configuration.EvaluatedInclude}");
 
-				foreach (var propertyGroup in project.Xml.PropertyGroups.Where(pg =>
-					pg.Label == "Configuration" && pg.Condition.Contains(configuration.EvaluatedInclude)))
-				{
-					var platformToolset = propertyGroup.Properties.First(p => p.Name == "PlatformToolset");
-					if (platformToolset != null && Assert(platformToolset.Value == config.PlatformToolsetVersion, $"\t\tPlatform toolset version is {config.PlatformToolsetVersion}") > 0)
-						nbIssues++;
-				}
+				project.SetGlobalProperty("Configuration", configuration.GetMetadataValue("Configuration"));
+				project.SetGlobalProperty("Platform", configuration.GetMetadataValue("Platform"));
+				project.ReevaluateIfNecessary();
 
-				foreach (var projectItemDefinitionGroupElement in project.Xml.ItemDefinitionGroups.Where(idg =>
-					idg.Condition.Contains(configuration.EvaluatedInclude)))
-				{
-					var clCompileElement = projectItemDefinitionGroupElement.ItemDefinitions.First(item => item.ItemType == "ClCompile");
-					var warningLevel = clCompileElement.Metadata.FirstOrDefault(item => item.ElementName == "WarningLevel");
-					if (warningLevel != null && Assert(warningLevel.Value == "Level4", "\t\tWarning Level 4") > 0)
-					{
-						nbIssues++;
-						if (config.BuildAfterReport)
-							warningLevel.Value = "Level4";
-					}
+				var platformToolset = project.GetProperty("PlatformToolset").EvaluatedValue;
+				nbIssues += Assert(platformToolset == config.PlatformToolsetVersion, 
+					$"\t\tPlatform toolset version is {config.PlatformToolsetVersion}",
+					$"It is {platformToolset}");
 
-					var warningIsError = clCompileElement.Metadata.FirstOrDefault(item => item.ElementName == "TreatWarningAsError");
-					if (warningIsError != null)
-					{
-						if (Assert(warningIsError.Value == "true", "\t\tTreat Warning As Error") > 0)
-						{
-							nbIssues++;
-							if (config.BuildAfterReport)
-								warningIsError.Value = "true";
-						}
-					}
-					else
-					{
-						nbIssues += Fail("\t\tTreat Warning As Error");
-						if (config.BuildAfterReport)
-							clCompileElement.AddMetadata("TreatWarningAsError", "true");
-					}
+				var compilerSettings = project.ItemDefinitions["ClCompile"];
 
-					var languageStandard = clCompileElement.Metadata.FirstOrDefault(item => item.ElementName == "LanguageStandard");
-					nbIssues += Assert(languageStandard != null && languageStandard.Value == "stdcpp20", "\t\tC++ Language Standard is c++20");
-				}
+				var warningLevel = compilerSettings.GetMetadata("WarningLevel");
+				bool warningLevelIsOK = warningLevel != null && 
+					(warningLevel.EvaluatedValue == "Level4" || warningLevel.EvaluatedValue == "EnableAllWarnings");
+				nbIssues += Assert(warningLevelIsOK, "\t\tWarning Level 4 or higher");
+				if (!warningLevelIsOK && (warningLevel == null || !warningLevel.IsImported))
+					compilerSettings.SetMetadataValue("WarningLevel", "Level4");
+
+				var warningIsError = compilerSettings.GetMetadata("TreatWarningAsError");
+				bool warningIsErrorIsOK = warningIsError != null && warningIsError.EvaluatedValue == "true";
+				nbIssues += Assert(warningIsErrorIsOK, "\t\tTreat Warning As Error");
+				if(!warningIsErrorIsOK && (warningIsError == null || !warningIsError.IsImported))
+					compilerSettings.SetMetadataValue("TreatWarningAsError", "true");
+
+				var languageStandard = compilerSettings.GetMetadata("LanguageStandard");
+				bool languageStandardIsOK = languageStandard != null && 
+					(languageStandard.EvaluatedValue == "stdcpp20" || languageStandard.EvaluatedValue == "stdcpplatest");
+				nbIssues += Assert(languageStandardIsOK, "\t\tC++ Language Standard is c++20 or higher");
 			}
 
 			project.Save();
@@ -304,8 +296,10 @@ namespace SubCheck
 		{
 			Console.Write($"{desc}....");
 			Console.ForegroundColor = ConsoleColor.Red;
-			Console.Write("NOK");
-			Console.WriteLine(reason);
+			if (!string.IsNullOrEmpty(reason))
+				Console.WriteLine($"NOK: {reason}");
+			else
+				Console.WriteLine("NOK");
 			Console.ResetColor();
 			return 1;
 		}
