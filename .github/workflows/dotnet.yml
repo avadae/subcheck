@@ -21,6 +21,8 @@ jobs:
         vs-version: '[17.2,17.3)'
     - name: Setup NuGet
       uses: nuget/setup-nuget@v1
+    - name: Restore Packages
+      run: nuget restore subcheck.csproj
     - name: Build & Publish
       run: ./build.ps1
       shell: pwsh  

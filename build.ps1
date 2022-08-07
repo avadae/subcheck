@@ -1,9 +1,9 @@
 dotnet tool install -g GitVersion.Tool --version 5.* -v q
 $gitversion = dotnet-gitversion /updateassemblyinfo | ConvertFrom-Json 
 
-msbuild -t:restore /property:Configuration=Release
+msbuild SubCheck.csproj -t:restore /property:Configuration=Release
 
-msbuild /property:Configuration=Release
+msbuild SubCheck.csproj /property:Configuration=Release
 
 Install-Package ilmerge -RequiredVersion 3.0.29 -Force -SkipValidate -Scope CurrentUser
 #$gitversion = dotnet-gitversion | ConvertFrom-Json 
