@@ -4,16 +4,13 @@ A tool to automatically check some basic things on student submission files for 
 [![Build Status](https://github.com/avadae/subcheck/actions/workflows/dotnet.yml/badge.svg)](https://github.com/avadae/subcheck/actions)
 [![GitHub Release](https://img.shields.io/github/v/release/avadae/subcheck?logo=github&sort=semver)](https://github.com/avadae/subcheck/releases/latest)
 
-
-# Build
-Run publish.ps1 in powershell to create a build
-
 # Use
-Drag a zip file containing your submission onto the generated subcheck.exe
+Drag a zip file containing your submission onto subcheck.exe
 - A config.xml will be generated containing the default configuration, you might want to tweak this
 - Your zip file will be unzipped in the same folder and the contents analyzed.
 
 Things that are checked (non exhaustive):
+- Visual Studio 2022 is installed
 - file is a zip file
 - filename matches with the given regex (see config.xml)
 - zip contains a vs2022 sln file
