@@ -21,7 +21,6 @@ namespace SubCheck
 		{
 			Console.WriteLine($"Submission Checker v{Assembly.GetExecutingAssembly().GetName().Version}");
 
-			MSBuildLocator.RegisterDefaults();
 
 			#region validate input
 			if (args.Length == 0)
@@ -64,10 +63,29 @@ namespace SubCheck
 				}
 			}
 
+			var instances = MSBuildLocator.QueryVisualStudioInstances();
+			foreach (var instance in instances)
+			{
+				if (instance.Version.Major == 17)
+				{
+					MSBuildLocator.RegisterMSBuildPath(instance.MSBuildPath);
+					config.SetVisualStudioPath(instance.VisualStudioRootPath);
+					Console.WriteLine($"Using {instance.Name} to build and analyze");
+					break;
+				}
+			}
+			if (!MSBuildLocator.IsRegistered)
+			{
+				Console.WriteLine($"Visual Studio with major version number {config.VSMajorVersionNumber} was not found!");
+				Console.ReadKey();
+				return;
+			}
+
 			if (!string.IsNullOrEmpty(config.DevenvPath) &&
 				!File.Exists(config.DevenvPath)) {
 				Console.WriteLine($"File in DevenvPath is not found: {config.DevenvPath}");
 			}
+
 			#endregion
 
 			PerformAnalysis(filename, config);
@@ -86,7 +104,9 @@ namespace SubCheck
 
 			try
 			{
-				ZipFile.ExtractToDirectory(filename, zipDirectoryName, true);
+				if(Directory.Exists(zipDirectoryName))
+					Directory.Delete(zipDirectoryName, true);
+				ZipFile.ExtractToDirectory(filename, zipDirectoryName);
 
 				var files = Directory.GetFiles(zipDirectoryName, "*.sln", SearchOption.AllDirectories);
 				nbIssues += Assert(files.Length == 1, "Found exactly one solution", $" - found {files.Length} solutions.");
@@ -97,6 +117,7 @@ namespace SubCheck
 					nbIssues += CheckSlnVersion(solutionFileName);
 					CheckCleanFolder(solutionDirectoryName);
 
+					ProjectCollection projects = new ProjectCollection();
 					solution = SolutionFile.Parse(Path.GetFullPath(solutionFileName));
 					foreach (var projectInSolution in solution.ProjectsInOrder)
 					{
@@ -112,13 +133,15 @@ namespace SubCheck
 						ProjectOptions options = new ProjectOptions
 						{
 							LoadSettings = ProjectLoadSettings.IgnoreMissingImports,
-							
+							ProjectCollection = projects
 						};
 						var project = Project.FromFile(projectPath, options);
 
 						Console.WriteLine($"Analyzing {Path.GetFileName(projectPath)}");
 						nbIssues += AnalyzeProject(project);
 					}
+					projects.UnloadAllProjects();
+
 				}
 			}
 			catch (InvalidDataException)
@@ -137,6 +160,7 @@ namespace SubCheck
 				!string.IsNullOrEmpty(config.DevenvPath) &&
 				File.Exists(config.DevenvPath))
 			{
+
 				if (config.BuildAfterReport)
 				{
 					foreach (var configuration in solution.SolutionConfigurations)
@@ -149,6 +173,7 @@ namespace SubCheck
 								File.Delete(logFilename);
 							Console.WriteLine($"Building {configuration.FullName}");
 							ProcessStartInfo startInfo = new ProcessStartInfo(config.DevenvPath);
+							startInfo.UseShellExecute = true;
 							startInfo.Arguments =
 								$"\"{Path.GetFullPath(solutionFileName)}\" " +
 								$"/Rebuild \"{configuration.FullName}\" " +
@@ -169,7 +194,10 @@ namespace SubCheck
 				{
 					try
 					{
-						Process.Start(config.DevenvPath, $"\"{solutionFileName}\"");
+						ProcessStartInfo startInfo = new ProcessStartInfo(config.DevenvPath);
+						startInfo.UseShellExecute = true;
+						startInfo.Arguments = $"\"{solutionFileName}\"";
+						Process.Start(startInfo);
 					}
 					catch (Win32Exception ex)
 					{
@@ -238,6 +266,7 @@ namespace SubCheck
 			}
 
 			project.Save();
+
 			return nbIssues;
 		}
 
@@ -263,11 +292,11 @@ namespace SubCheck
 					{
 						var parts = Regex.Split(line, "VisualStudioVersion = ");
 						var version = new Version(parts[1]);
-						return Assert(version.Major == config.SolutionMajorVersionNumber, $"Correct Visual Studio version ({config.SolutionMajorVersionNumber}): {version}");
+						return Assert(version.Major == config.VSMajorVersionNumber, $"Correct Visual Studio version ({config.VSMajorVersionNumber}): {version}");
 					}
 				}
 			}
-			return Fail($"Correct Visual Studio version ({config.SolutionMajorVersionNumber})");
+			return Fail($"Correct Visual Studio version ({config.VSMajorVersionNumber})");
 		}
 
 		private static int CheckName(string filename)
