@@ -7,7 +7,7 @@ A tool to automatically check some basic things on student submission files for 
 # Use
 Drag a zip file containing your submission onto subcheck.exe
 - A config.xml will be generated containing the default configuration, you might want to tweak this
-- Your zip file will be unzipped in the same folder and the contents analyzed.
+- Your zip file will be unzipped and the contents analyzed.
 
 Things that are checked (non exhaustive):
 - Visual Studio 2022 is installed
