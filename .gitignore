@@ -457,6 +457,5 @@ $RECYCLE.BIN/
 *.exe
 *.zip
 *.log
-*.sln
 config.xml
 Properties/LaunchSettings.json

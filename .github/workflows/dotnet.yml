@@ -22,7 +22,7 @@ jobs:
     - name: Setup NuGet
       uses: nuget/setup-nuget@v1
     - name: Restore Packages
-      run: nuget restore subcheck.csproj
+      run: nuget restore subcheck.sln
     - name: Build & Publish
       run: ./build.ps1
       shell: pwsh  
