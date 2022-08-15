@@ -70,7 +70,7 @@ namespace SubCheck
 				{
 					MSBuildLocator.RegisterMSBuildPath(instance.MSBuildPath);
 					config.SetVisualStudioPath(instance.VisualStudioRootPath);
-					Console.WriteLine($"Using {instance.Name} to build and analyze");
+					Console.WriteLine($"Using {instance.Name} to build and analyze - version {instance.Version}");
 					break;
 				}
 			}
@@ -82,7 +82,8 @@ namespace SubCheck
 			}
 
 			if (!string.IsNullOrEmpty(config.DevenvPath) &&
-				!File.Exists(config.DevenvPath)) {
+				!File.Exists(config.DevenvPath))
+			{
 				Console.WriteLine($"File in DevenvPath is not found: {config.DevenvPath}");
 			}
 
@@ -100,11 +101,11 @@ namespace SubCheck
 			string solutionFileName = null;
 			string zipDirectoryName = Path.GetFileNameWithoutExtension(filename);
 			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport)
-				zipDirectoryName = Path.Combine(Path.GetTempPath(),"subcheck",zipDirectoryName);
+				zipDirectoryName = Path.Combine(Path.GetTempPath(), "subcheck", zipDirectoryName);
 
 			try
 			{
-				if(Directory.Exists(zipDirectoryName))
+				if (Directory.Exists(zipDirectoryName))
 					Directory.Delete(zipDirectoryName, true);
 				ZipFile.ExtractToDirectory(filename, zipDirectoryName);
 
@@ -207,7 +208,7 @@ namespace SubCheck
 			}
 
 			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport && Directory.Exists(zipDirectoryName))
-				Directory.Delete(zipDirectoryName,true);
+				Directory.Delete(zipDirectoryName, true);
 
 			Console.WriteLine("Done, press a key to close.");
 			Console.ReadKey();
@@ -220,11 +221,13 @@ namespace SubCheck
 				return File.ReadLines(logFileName).First(s =>
 					Regex.Match(s, "^=+ Rebuild All: \\d succeeded, \\d failed, \\d skipped =+").Success);
 			}
-			catch(InvalidOperationException ioe)
+			catch (InvalidOperationException ioe)
 			{
 				return $"Rebuild All failed: {ioe.Message}";
 			}
 		}
+
+
 
 		private static int AnalyzeProject(Project project)
 		{
@@ -240,35 +243,64 @@ namespace SubCheck
 				project.ReevaluateIfNecessary();
 
 				var platformToolset = project.GetProperty("PlatformToolset").EvaluatedValue;
-				nbIssues += Assert(platformToolset == config.PlatformToolsetVersion, 
+				nbIssues += Assert(platformToolset == config.PlatformToolsetVersion,
 					$"\t\tPlatform toolset version is {config.PlatformToolsetVersion}",
 					$"It is {platformToolset}");
 
 				var compilerSettings = project.ItemDefinitions["ClCompile"];
 
 				var warningLevel = compilerSettings.GetMetadata("WarningLevel");
-				bool warningLevelIsOK = warningLevel != null && 
+				bool warningLevelIsOK = warningLevel != null &&
 					(warningLevel.EvaluatedValue == "Level4" || warningLevel.EvaluatedValue == "EnableAllWarnings");
-				nbIssues += Assert(warningLevelIsOK, "\t\tWarning Level 4 or higher");
+				nbIssues += Assert(warningLevelIsOK, "\t\tC++ Coding Standard #1 is respected: Warning Level 4 or higher");
 				if (!warningLevelIsOK && (warningLevel == null || !warningLevel.IsImported))
 					compilerSettings.SetMetadataValue("WarningLevel", "Level4");
 
 				var warningIsError = compilerSettings.GetMetadata("TreatWarningAsError");
 				bool warningIsErrorIsOK = warningIsError != null && warningIsError.EvaluatedValue == "true";
 				nbIssues += Assert(warningIsErrorIsOK, "\t\tTreat Warning As Error");
-				if(!warningIsErrorIsOK && (warningIsError == null || !warningIsError.IsImported))
+				if (!warningIsErrorIsOK && (warningIsError == null || !warningIsError.IsImported))
 					compilerSettings.SetMetadataValue("TreatWarningAsError", "true");
 
 				var languageStandard = compilerSettings.GetMetadata("LanguageStandard");
-				bool languageStandardIsOK = languageStandard != null && 
+				bool languageStandardIsOK = languageStandard != null &&
 					(languageStandard.EvaluatedValue == "stdcpp20" || languageStandard.EvaluatedValue == "stdcpplatest");
 				nbIssues += Assert(languageStandardIsOK, "\t\tC++ Language Standard is c++20 or higher");
+
+				nbIssues += CheckUsingNamespaces(project);
 			}
 
 			project.Save();
 
+
+
 			return nbIssues;
 		}
+
+		private static int CheckUsingNamespaces(Project project)
+		{
+			var includeFiles = project.GetItems("ClInclude");
+			int nbInvalidNamespaces = 0;
+			foreach (var file in includeFiles)
+			{
+				var path = Path.Combine(project.DirectoryPath, file.EvaluatedInclude);
+				if (File.Exists(path))
+				{
+					bool usingNamespaceFoundInHeader = FileContainsText(path, @"^\s*?using\s+?namespace\s+?\w+\s*?;");
+					if (usingNamespaceFoundInHeader)
+						nbInvalidNamespaces += Fail("\t\tC++ Coding Standard #59 / C++ Core Guideline SF.7 is respected.", $"Violation found in {file.EvaluatedInclude}");
+				}
+				else
+				{
+					// what to do if the file does not exist?
+				}
+			}
+			if (nbInvalidNamespaces == 0)
+				Success("\t\tC++ Coding Standard #59 / C++ Core Guideline SF.7 is respected.");
+			return nbInvalidNamespaces;
+		}
+
+
 
 		private static int CheckCleanFolder(string folder)
 		{
@@ -332,6 +364,20 @@ namespace SubCheck
 			Console.ResetColor();
 			return 1;
 		}
-	}
 
+		private static bool FileContainsText(string path, string regex)
+		{
+			using (var sr = new StreamReader(path))
+			{
+				string line = sr.ReadLine();
+				while (line != null)
+				{
+					if (Regex.IsMatch(line, regex))
+						return true;
+					line = sr.ReadLine();
+				}
+			}
+			return false;
+		}
+	}
 }
