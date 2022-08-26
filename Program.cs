@@ -227,8 +227,6 @@ namespace SubCheck
 			}
 		}
 
-
-
 		private static int AnalyzeProject(Project project)
 		{
 			int nbIssues = 0;
@@ -249,25 +247,26 @@ namespace SubCheck
 
 				var compilerSettings = project.ItemDefinitions["ClCompile"];
 
-				var warningLevel = compilerSettings.GetMetadata("WarningLevel");
-				bool warningLevelIsOK = warningLevel != null &&
-					(warningLevel.EvaluatedValue == "Level4" || warningLevel.EvaluatedValue == "EnableAllWarnings");
-				nbIssues += Assert(warningLevelIsOK, "\t\tC++ Coding Standard #1 is respected: Warning Level 4 or higher");
-				if (!warningLevelIsOK && (warningLevel == null || !warningLevel.IsImported))
-					compilerSettings.SetMetadataValue("WarningLevel", "Level4");
-
-				var warningIsError = compilerSettings.GetMetadata("TreatWarningAsError");
-				bool warningIsErrorIsOK = warningIsError != null && warningIsError.EvaluatedValue == "true";
-				nbIssues += Assert(warningIsErrorIsOK, "\t\tTreat Warning As Error");
-				if (!warningIsErrorIsOK && (warningIsError == null || !warningIsError.IsImported))
-					compilerSettings.SetMetadataValue("TreatWarningAsError", "true");
-
 				var languageStandard = compilerSettings.GetMetadata("LanguageStandard");
 				bool languageStandardIsOK = languageStandard != null &&
 					(languageStandard.EvaluatedValue == "stdcpp20" || languageStandard.EvaluatedValue == "stdcpplatest");
 				nbIssues += Assert(languageStandardIsOK, "\t\tC++ Language Standard is c++20 or higher");
 
-				nbIssues += CheckUsingNamespaces(project);
+				var warningLevel = compilerSettings.GetMetadata("WarningLevel");
+				bool warningLevelIsOK = warningLevel != null &&
+					(warningLevel.EvaluatedValue == "Level4" || warningLevel.EvaluatedValue == "EnableAllWarnings");
+				nbIssues += Assert(warningLevelIsOK, "\t\tC++ Coding Standard #1 is respected: Warning Level is set to 4 or higher");
+				if (!warningLevelIsOK && (warningLevel == null || !warningLevel.IsImported))
+					compilerSettings.SetMetadataValue("WarningLevel", "Level4");
+
+				var warningIsError = compilerSettings.GetMetadata("TreatWarningAsError");
+				bool warningIsErrorIsOK = warningIsError != null && warningIsError.EvaluatedValue == "true";
+				nbIssues += Assert(warningIsErrorIsOK, "\t\tC++ Coding Standard #1 is enforced: Treat Warning As Error is enabled");
+				if (!warningIsErrorIsOK && (warningIsError == null || !warningIsError.IsImported))
+					compilerSettings.SetMetadataValue("TreatWarningAsError", "true");
+
+				nbIssues += FindInHeaders(project, @"^\s*?using\s+?namespace\s+?\w+\s*?;", "\t\tC++ Coding Standard #59 / C++ Core Guideline SF.7 is respected.", false);
+				//nbIssues += FindInHeaders(project, @"^\s*?#pragma\s+?once", "\t\tC++ Coding Standard #24 / C++ Core Guideline SF.8 is respected (with #pragma once).");
 			}
 
 			project.Save();
@@ -277,30 +276,36 @@ namespace SubCheck
 			return nbIssues;
 		}
 
-		private static int CheckUsingNamespaces(Project project)
+		private static int FindInHeaders(Project project, string regex, string message, bool expected = true)
 		{
 			var includeFiles = project.GetItems("ClInclude");
-			int nbInvalidNamespaces = 0;
+			int nbInvalidHeaders = 0;
 			foreach (var file in includeFiles)
 			{
 				var path = Path.Combine(project.DirectoryPath, file.EvaluatedInclude);
 				if (File.Exists(path))
 				{
-					bool usingNamespaceFoundInHeader = FileContainsText(path, @"^\s*?using\s+?namespace\s+?\w+\s*?;");
-					if (usingNamespaceFoundInHeader)
-						nbInvalidNamespaces += Fail("\t\tC++ Coding Standard #59 / C++ Core Guideline SF.7 is respected.", $"Violation found in {file.EvaluatedInclude}");
+					bool regexFoundInHeader = FileContainsText(path, regex);
+					if(expected)
+					{
+						if(!regexFoundInHeader)
+							nbInvalidHeaders += Fail(message, $"Violation found in {file.EvaluatedInclude}");
+					}
+					else
+					{
+						if(regexFoundInHeader)
+							nbInvalidHeaders += Fail(message, $"Violation found in {file.EvaluatedInclude}");
+					}
 				}
 				else
 				{
 					// what to do if the file does not exist?
 				}
 			}
-			if (nbInvalidNamespaces == 0)
-				Success("\t\tC++ Coding Standard #59 / C++ Core Guideline SF.7 is respected.");
-			return nbInvalidNamespaces;
+			if (nbInvalidHeaders == 0)
+				Success(message);
+			return nbInvalidHeaders;
 		}
-
-
 
 		private static int CheckCleanFolder(string folder)
 		{
