@@ -173,12 +173,14 @@ namespace SubCheck
 							if (File.Exists(logFilename))
 								File.Delete(logFilename);
 							Console.WriteLine($"Building {configuration.FullName}");
-							ProcessStartInfo startInfo = new ProcessStartInfo(config.DevenvPath);
-							startInfo.UseShellExecute = true;
-							startInfo.Arguments =
+							ProcessStartInfo startInfo = new ProcessStartInfo(config.DevenvPath)
+							{
+								UseShellExecute = true,
+								Arguments =
 								$"\"{Path.GetFullPath(solutionFileName)}\" " +
 								$"/Rebuild \"{configuration.FullName}\" " +
-								$"/Out \"{logFilename}\"";
+								$"/Out \"{logFilename}\""
+							};
 							var process = Process.Start(startInfo);
 							process.WaitForExit();
 
@@ -195,9 +197,11 @@ namespace SubCheck
 				{
 					try
 					{
-						ProcessStartInfo startInfo = new ProcessStartInfo(config.DevenvPath);
-						startInfo.UseShellExecute = true;
-						startInfo.Arguments = $"\"{solutionFileName}\"";
+						ProcessStartInfo startInfo = new ProcessStartInfo(config.DevenvPath)
+						{
+							UseShellExecute = true,
+							Arguments = $"\"{solutionFileName}\""
+						};
 						Process.Start(startInfo);
 					}
 					catch (Win32Exception ex)
@@ -244,6 +248,9 @@ namespace SubCheck
 				nbIssues += Assert(platformToolset == config.PlatformToolsetVersion,
 					$"\t\tPlatform toolset version is {config.PlatformToolsetVersion}",
 					$"It is {platformToolset}");
+
+				//var codeAnalysisEnabled = project.GetProperty("RunCodeAnalysis").EvaluatedValue;
+				//nbIssues += Assert(codeAnalysisEnabled == "true", "\t\tCode analysis is enabled...");
 
 				var compilerSettings = project.ItemDefinitions["ClCompile"];
 
