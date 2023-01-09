@@ -249,9 +249,6 @@ namespace SubCheck
 					$"\t\tPlatform toolset version is {config.PlatformToolsetVersion}",
 					$"It is {platformToolset}");
 
-				//var codeAnalysisEnabled = project.GetProperty("RunCodeAnalysis").EvaluatedValue;
-				//nbIssues += Assert(codeAnalysisEnabled == "true", "\t\tCode analysis is enabled...");
-
 				var compilerSettings = project.ItemDefinitions["ClCompile"];
 
 				var languageStandard = compilerSettings.GetMetadata("LanguageStandard");
