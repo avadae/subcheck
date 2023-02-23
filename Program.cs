@@ -21,7 +21,6 @@ namespace SubCheck
 		{
 			Console.WriteLine($"Submission Checker v{Assembly.GetExecutingAssembly().GetName().Version}");
 
-
 			#region validate input
 			if (args.Length == 0)
 			{
@@ -116,7 +115,7 @@ namespace SubCheck
 					solutionFileName = files[0];
 					var solutionDirectoryName = Path.GetDirectoryName(solutionFileName);
 					nbIssues += CheckSlnVersion(solutionFileName);
-					CheckCleanFolder(solutionDirectoryName);
+					nbIssues += CheckCleanFolder(solutionDirectoryName);
 
 					ProjectCollection projects = new ProjectCollection();
 					solution = SolutionFile.Parse(Path.GetFullPath(solutionFileName));
