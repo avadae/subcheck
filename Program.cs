@@ -317,6 +317,7 @@ namespace SubCheck
 			nbIssues += Directory.Exists(Path.Combine(folder, "Win32")) ? 1 : 0;
 			nbIssues += Directory.Exists(Path.Combine(folder, "x64")) ? 1 : 0;
 			nbIssues += Directory.Exists(Path.Combine(folder, ".vs")) ? 1 : 0;
+			nbIssues += Directory.Exists(Path.Combine(folder, ".git")) ? 1 : 0;
 			Assert(nbIssues == 0, $"Folder {folder} is clean");
 			return nbIssues;
 		}
