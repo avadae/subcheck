@@ -10,6 +10,7 @@ using Microsoft.Build.Construction;
 using Microsoft.Build.Definition;
 using Microsoft.Build.Evaluation;
 using Microsoft.Build.Locator;
+using Microsoft.Win32;
 
 namespace SubCheck
 {
@@ -41,7 +42,8 @@ namespace SubCheck
 				Console.ReadKey();
 				return;
 			}
-
+			string exeLocation = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
+			Directory.SetCurrentDirectory(exeLocation);
 			string configPath = Path.GetFullPath("config.xml");
 			if (!File.Exists(configPath))
 			{
@@ -91,74 +93,182 @@ namespace SubCheck
 			PerformAnalysis(filename, config);
 		}
 
-		public static void PerformAnalysis(string filename, Config config)
+		public static int PerformCMakeAnalysis(string directoryName, Config config)
 		{
-			Console.WriteLine($"Analyzing {filename}");
-			int nbIssues = CheckName(filename);
+			int nbIssues = 0;
 
-			SolutionFile solution = null;
-			string solutionFileName = null;
-			string zipDirectoryName = Path.GetFileNameWithoutExtension(filename);
-			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport)
-				zipDirectoryName = Path.Combine(Path.GetTempPath(), "subcheck", zipDirectoryName);
+			var cmakefiles = Directory.GetFiles(directoryName, "CMakeLists.txt", SearchOption.AllDirectories);
+			string cmakeListsFilePath = cmakefiles[0]; // we're assuming that the first one is the one of the project.
+			string cmakeListsContent = ReadFile(cmakeListsFilePath);
 
+			Console.WriteLine($"Analyzing {Path.GetFileName(cmakeListsFilePath)}");
+
+			nbIssues += CheckCleanFolder(Path.GetDirectoryName(cmakeListsFilePath));
+
+			string pattern = @"^\s*cmake_minimum_required\s*\(\s*VERSION\s+(\d+\.\d+(\.\d+)?)\s*\)";
+			Match match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
+
+			if (match.Success)
+			{
+				string versionString = match.Groups[1].Value;
+				if (Version.TryParse(versionString, out Version version))
+					nbIssues += Assert(version <= config.CMakeversion, $"\tCMake version is less than or equal to {config.CMakeversion}");
+				else
+					nbIssues += Fail("\tFailed to parse cmake version.");
+			}
+			else
+			{
+				nbIssues += Fail("\tcmake_minimum_required not found or has an invalid format.");
+			}
+
+			// c++20 enabled
+			pattern = @"^\s*target_compile_features\s*\(\s*\S+\s+(PRIVATE|PUBLIC)\s+cxx_std_20\s*\)";
+			match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
+			nbIssues += Assert(match.Success, "\tC++ Language Standard is c++20 or higher");
+
+			// warning level 4 + warnings treated as errors
+			pattern = @"^\s*target_compile_options\s*\(\s*\S+\s+(PRIVATE|PUBLIC)\s+\/W4\s+\/WX\s*\)";
+			match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
+			nbIssues += Assert(match.Success, "\tC++ Coding Standard #1 is respected: Warning Level is set to 4 or higher, warnings are treated as errors");
+
+			if (config.OpenVSAfterReport)
+			{
+				StartVSCode($"\"{Path.GetDirectoryName(cmakeListsFilePath)}\"");
+			}
+
+			return nbIssues;
+		}
+
+		private static void StartVSCode(string arguments)
+		{
 			try
 			{
-				if (Directory.Exists(zipDirectoryName))
-					Directory.Delete(zipDirectoryName, true);
-				ZipFile.ExtractToDirectory(filename, zipDirectoryName);
-
-				var files = Directory.GetFiles(zipDirectoryName, "*.sln", SearchOption.AllDirectories);
-				nbIssues += Assert(files.Length == 1, "Found exactly one solution", $" - found {files.Length} solutions.");
-				if (files.Length > 0) // let's assume the first one is the correct one.
+				ProcessStartInfo psi = new ProcessStartInfo
 				{
-					solutionFileName = files[0];
-					var solutionDirectoryName = Path.GetDirectoryName(solutionFileName);
-					nbIssues += CheckSlnVersion(solutionFileName);
-					nbIssues += CheckCleanFolder(solutionDirectoryName);
+					FileName = "code",
+					UseShellExecute = true,
+					Arguments = arguments,
+					CreateNoWindow = true,
+					WindowStyle = ProcessWindowStyle.Hidden
+				};
 
-					ProjectCollection projects = new ProjectCollection();
-					solution = SolutionFile.Parse(Path.GetFullPath(solutionFileName));
-					foreach (var projectInSolution in solution.ProjectsInOrder)
+				Process process = new Process
+				{
+					StartInfo = psi
+				};
+
+				process.Start();
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error starting Visual Studio Code: {ex.Message}");
+			}
+		}
+
+		private static bool VerifyCMake(Config config)
+		{
+			bool result = false;
+			ProcessStartInfo startInfo = new ProcessStartInfo
+			{
+				FileName = "cmake",
+				UseShellExecute = false,
+				Arguments = "--version",
+				RedirectStandardOutput = true,
+				CreateNoWindow = true,
+			};
+			using (var process = Process.Start(startInfo))
+			{
+				string versionPattern = @"cmake version (\d+\.\d+\.\d+)";
+				while (!process.StandardOutput.EndOfStream)
+				{
+					string line = process.StandardOutput.ReadLine();
+					Match match = Regex.Match(line, versionPattern);
+
+					if (match.Success)
 					{
-						var projectPath = Path.Combine(solutionDirectoryName, projectInSolution.RelativePath);
-						nbIssues += CheckCleanFolder(Path.GetDirectoryName(projectPath));
-
-						if (!File.Exists(projectPath))
+						string versionString = match.Groups[1].Value;
+						if (Version.TryParse(versionString, out Version version))
 						{
-							nbIssues += Fail($"Project {Path.GetFileName(projectPath)} could not be found");
-							continue;
+							Console.WriteLine($"CMake version: {version}");
+							config.SetCMakeVersion(version);
+							result = version >= config.MinCMakeVersion;
 						}
-
-						ProjectOptions options = new ProjectOptions
-						{
-							LoadSettings = ProjectLoadSettings.IgnoreMissingImports,
-							ProjectCollection = projects
-						};
-						var project = Project.FromFile(projectPath, options);
-
-						Console.WriteLine($"Analyzing {Path.GetFileName(projectPath)}");
-						nbIssues += AnalyzeProject(project);
 					}
-					projects.UnloadAllProjects();
-
 				}
 			}
-			catch (InvalidDataException)
-			{
-				nbIssues += Fail("File format (zip)");
-			}
-			catch (UnauthorizedAccessException)
-			{
-				nbIssues += Fail($"Unzip into {zipDirectoryName}");
-			}
+			return result;
+		}
 
-			Console.WriteLine($"Found {nbIssues} issue(s).");
+		public static bool VerifyCode(Config config)
+		{
+			bool result = false;
+			const string registryPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 
-			if (solution != null &&
-				!string.IsNullOrEmpty(solutionFileName) &&
-				!string.IsNullOrEmpty(config.DevenvPath) &&
-				File.Exists(config.DevenvPath))
+			using (RegistryKey key = Registry.LocalMachine.OpenSubKey(registryPath))
+			{
+				if (key != null)
+				{
+					foreach (string subKeyName in key.GetSubKeyNames())
+					{
+						using (RegistryKey subKey = key.OpenSubKey(subKeyName))
+						{
+							object displayName = subKey?.GetValue("DisplayName");
+							object displayVersion = subKey?.GetValue("DisplayVersion");
+
+							if (displayName != null && displayName.ToString().Contains("Visual Studio Code") &&
+								displayVersion != null)
+							{
+								if (Version.TryParse(displayVersion.ToString(), out Version version))
+								{
+									Console.WriteLine($"Code version: {version}");
+									result = version >= config.MinCodeVersion;
+								}
+							}
+						}
+					}
+				}
+			}
+			return result;
+		}
+
+		public static int PerformVSAnalysis(string directoryName, Config config)
+		{
+			var files = Directory.GetFiles(directoryName, "*.sln", SearchOption.AllDirectories);
+			int nbIssues = Assert(files.Length == 1, "Found exactly one solution", $" - found {files.Length} solutions.");
+			if (files.Length == 0) // let's assume the first one is the correct one.
+				return nbIssues;
+			var solutionFileName = files[0];
+			var solutionDirectoryName = Path.GetDirectoryName(solutionFileName);
+			nbIssues += CheckSlnVersion(solutionFileName);
+			nbIssues += CheckCleanFolder(solutionDirectoryName);
+
+			ProjectCollection projects = new ProjectCollection();
+			var solution = SolutionFile.Parse(Path.GetFullPath(solutionFileName));
+			foreach (var projectInSolution in solution.ProjectsInOrder)
+			{
+				var projectPath = Path.Combine(solutionDirectoryName, projectInSolution.RelativePath);
+				nbIssues += CheckCleanFolder(Path.GetDirectoryName(projectPath));
+
+				if (!File.Exists(projectPath))
+				{
+					nbIssues += Fail($"Project {Path.GetFileName(projectPath)} could not be found");
+					continue;
+				}
+
+				ProjectOptions options = new ProjectOptions
+				{
+					LoadSettings = ProjectLoadSettings.IgnoreMissingImports,
+					ProjectCollection = projects
+				};
+				var project = Project.FromFile(projectPath, options);
+
+				Console.WriteLine($"Analyzing {Path.GetFileName(projectPath)}");
+				nbIssues += AnalyzeProject(project);
+			}
+			projects.UnloadAllProjects();
+
+			if (solution != null &&	!string.IsNullOrEmpty(solutionFileName) &&
+				!string.IsNullOrEmpty(config.DevenvPath) &&	File.Exists(config.DevenvPath))
 			{
 
 				if (config.BuildAfterReport)
@@ -209,6 +319,66 @@ namespace SubCheck
 					}
 				}
 			}
+
+			return nbIssues;
+		}
+
+
+		public static void PerformAnalysis(string filename, Config config)
+		{
+			Console.WriteLine($"Analyzing {filename}");
+			int nbIssues = CheckName(filename);
+
+			string zipDirectoryName = Path.GetFileNameWithoutExtension(filename);
+			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport)
+				zipDirectoryName = Path.Combine(Path.GetTempPath(), "subcheck", zipDirectoryName);
+
+			try
+			{
+				if (Directory.Exists(zipDirectoryName))
+					Directory.Delete(zipDirectoryName, true);
+				ZipFile.ExtractToDirectory(filename, zipDirectoryName);
+
+				var cmakefiles = Directory.GetFiles(zipDirectoryName, "CMakeLists.txt", SearchOption.AllDirectories);
+				if(cmakefiles.Length > 0)
+				{
+					Console.WriteLine($"A cmake config file was found, treat this as a cmake project? (y)es/(n)o");
+					var response = Console.ReadKey().KeyChar.ToString();
+
+					if (response.ToLower() == "yes" || response.ToLower() == "y")
+					{
+						bool cmakeAvailable = VerifyCMake(config);
+						if (!cmakeAvailable)
+						{
+							Console.WriteLine($"CMake {config.MinCMakeVersion} or later was not found!.");
+							Console.ReadKey();
+							return;
+						}
+						bool codeAvailable = VerifyCode(config);
+						if (!codeAvailable)
+						{
+							Console.WriteLine($"Code {config.MinCodeVersion} or later was not found!.");
+							Console.ReadKey();
+							return;
+						}
+						nbIssues += PerformCMakeAnalysis(zipDirectoryName, config);
+					}
+					else
+					{
+						nbIssues += PerformVSAnalysis(zipDirectoryName, config);
+					}
+				}
+			}
+			catch (InvalidDataException)
+			{
+				nbIssues += Fail("File format (zip)");
+			}
+			catch (UnauthorizedAccessException)
+			{
+				nbIssues += Fail($"Unzip into {zipDirectoryName}");
+			}
+
+			Console.WriteLine($"Found {nbIssues} issue(s).");
 
 			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport && Directory.Exists(zipDirectoryName))
 				Directory.Delete(zipDirectoryName, true);
@@ -318,6 +488,7 @@ namespace SubCheck
 			nbIssues += Directory.Exists(Path.Combine(folder, "x64")) ? 1 : 0;
 			nbIssues += Directory.Exists(Path.Combine(folder, ".vs")) ? 1 : 0;
 			nbIssues += Directory.Exists(Path.Combine(folder, ".git")) ? 1 : 0;
+			nbIssues += Directory.Exists(Path.Combine(folder, "build")) ? 1 : 0;
 			Assert(nbIssues == 0, $"Folder {folder} is clean");
 			return nbIssues;
 		}
@@ -372,6 +543,19 @@ namespace SubCheck
 				Console.WriteLine("NOK");
 			Console.ResetColor();
 			return 1;
+		}
+
+		private static string ReadFile(string filePath)
+		{
+			try
+			{
+				return File.ReadAllText(filePath);
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error reading file: {ex.Message}");
+				return null;
+			}
 		}
 
 		private static bool FileContainsText(string path, string regex)
