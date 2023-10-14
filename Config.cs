@@ -21,6 +21,7 @@ namespace SubCheck
 		public bool UseTempFolderForAnalysis { get; set; } = true;
 		public Version MinCMakeVersion { get; set; } = new Version("3.26.0");
 		public Version MinCodeVersion { get; set; } = new Version("1.82.0");
+		public string CMakeBuildSystemGenerator { get; set; } = "Visual Studio 17 2022";
 		public Version CMakeversion { get { return cmakeVersion; } }
 	}
 }

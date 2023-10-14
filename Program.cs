@@ -98,12 +98,13 @@ namespace SubCheck
 			int nbIssues = 0;
 
 			var cmakefiles = Directory.GetFiles(directoryName, "CMakeLists.txt", SearchOption.AllDirectories);
-			string cmakeListsFilePath = cmakefiles[0]; // we're assuming that the first one is the one of the project.
+			string cmakeListsFilePath = Path.GetFullPath(cmakefiles[0]); // we're assuming that the first one is the one of the project.
 			string cmakeListsContent = ReadFile(cmakeListsFilePath);
+			string cmakeListsFolder = Path.GetDirectoryName(cmakeListsFilePath);
 
-			Console.WriteLine($"Analyzing {Path.GetFileName(cmakeListsFilePath)}");
+			Console.WriteLine($"Analyzing {cmakeListsFolder}");
 
-			nbIssues += CheckCleanFolder(Path.GetDirectoryName(cmakeListsFilePath));
+			nbIssues += CheckCleanFolder(cmakeListsFolder);
 
 			string pattern = @"^\s*cmake_minimum_required\s*\(\s*VERSION\s+(\d+\.\d+(\.\d+)?)\s*\)";
 			Match match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
@@ -131,10 +132,9 @@ namespace SubCheck
 			match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
 			nbIssues += Assert(match.Success, "\tC++ Coding Standard #1 is respected: Warning Level is set to 4 or higher, warnings are treated as errors");
 
-			if (config.OpenVSAfterReport)
-			{
-				StartVSCode($"\"{Path.GetDirectoryName(cmakeListsFilePath)}\"");
-			}
+			CreateVSSolutionFromCMake(config, Path.GetDirectoryName(cmakeListsFilePath));
+
+			PerformVSAnalysis(Path.Combine(cmakeListsFolder, "build"), config, true);
 
 			return nbIssues;
 		}
@@ -199,6 +199,21 @@ namespace SubCheck
 			return result;
 		}
 
+		private static void CreateVSSolutionFromCMake(Config config, string directoryName)
+		{
+			ProcessStartInfo startInfo = new ProcessStartInfo
+			{
+				FileName = "cmake",
+				Arguments = $"--no-warn-unused-cli -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -S\"{directoryName}\" -B\"{Path.Combine(directoryName,"build")}\" " +
+					$"-G \"{config.CMakeBuildSystemGenerator}\"",
+			};
+			using (var process = Process.Start(startInfo))
+			{
+				Console.WriteLine($"Creating build files in {Path.Combine(directoryName, "build")}");
+				process.WaitForExit();
+			}
+		}
+
 		public static bool VerifyCode(Config config)
 		{
 			bool result = false;
@@ -231,10 +246,10 @@ namespace SubCheck
 			return result;
 		}
 
-		public static int PerformVSAnalysis(string directoryName, Config config)
+		public static int PerformVSAnalysis(string directoryName, Config config, bool isCMakeProject = false)
 		{
 			var files = Directory.GetFiles(directoryName, "*.sln", SearchOption.AllDirectories);
-			int nbIssues = Assert(files.Length == 1, "Found exactly one solution", $" - found {files.Length} solutions.");
+			int nbIssues = isCMakeProject ? 0 : Assert(files.Length == 1, "Found exactly one solution", $" - found {files.Length} solutions.");
 			if (files.Length == 0) // let's assume the first one is the correct one.
 				return nbIssues;
 			var solutionFileName = files[0];
@@ -247,6 +262,10 @@ namespace SubCheck
 			foreach (var projectInSolution in solution.ProjectsInOrder)
 			{
 				var projectPath = Path.Combine(solutionDirectoryName, projectInSolution.RelativePath);
+				var projectName = Path.GetFileNameWithoutExtension(projectPath);
+				if (projectName == "ALL_BUILD" || projectName == "ZERO_CHECK" || projectName == "CMakePredefinedTargets")
+					continue;
+
 				nbIssues += CheckCleanFolder(Path.GetDirectoryName(projectPath));
 
 				if (!File.Exists(projectPath))
@@ -275,6 +294,9 @@ namespace SubCheck
 				{
 					foreach (var configuration in solution.SolutionConfigurations)
 					{
+						if (configuration.ConfigurationName != "Debug" && configuration.ConfigurationName != "Release")
+							continue;
+
 						try
 						{
 							var logFilename =
@@ -322,7 +344,6 @@ namespace SubCheck
 
 			return nbIssues;
 		}
-
 
 		public static void PerformAnalysis(string filename, Config config)
 		{
@@ -380,10 +401,11 @@ namespace SubCheck
 
 			Console.WriteLine($"Found {nbIssues} issue(s).");
 
+			Console.WriteLine("Done, press a key to close."); 
+			
 			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport && Directory.Exists(zipDirectoryName))
 				Directory.Delete(zipDirectoryName, true);
 
-			Console.WriteLine("Done, press a key to close.");
 			Console.ReadKey();
 		}
 
@@ -407,6 +429,10 @@ namespace SubCheck
 			var configurations = project.GetItems("ProjectConfiguration");
 			foreach (var configuration in configurations)
 			{
+				var configurationName = configuration.GetMetadataValue("Configuration");
+				if (configurationName != "Debug" && configurationName != "Release")
+					continue;
+
 				Console.WriteLine($"\tConfiguration {configuration.EvaluatedInclude}");
 
 				project.SetGlobalProperty("Configuration", configuration.GetMetadataValue("Configuration"));
@@ -448,6 +474,7 @@ namespace SubCheck
 
 			return nbIssues;
 		}
+
 
 		private static int FindInHeaders(Project project, string regex, string message, bool expected = true)
 		{
@@ -506,6 +533,11 @@ namespace SubCheck
 						var version = new Version(parts[1]);
 						return Assert(version.Major == config.VSMajorVersionNumber, $"Correct Visual Studio version ({config.VSMajorVersionNumber}): {version}");
 					}
+					else if(line == $"# Visual Studio Version {config.VSMajorVersionNumber}")
+					{
+						return Success($"Correct Visual Studio version ({config.VSMajorVersionNumber})");
+					}
+					
 				}
 			}
 			return Fail($"Correct Visual Studio version ({config.VSMajorVersionNumber})");
