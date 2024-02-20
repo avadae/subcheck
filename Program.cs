@@ -361,7 +361,7 @@ namespace SubCheck
 				ZipFile.ExtractToDirectory(filename, zipDirectoryName);
 
 				var cmakefiles = Directory.GetFiles(zipDirectoryName, "CMakeLists.txt", SearchOption.AllDirectories);
-				if(cmakefiles.Length > 0)
+				if (cmakefiles.Length > 0)
 				{
 					Console.WriteLine($"A cmake config file was found, treat this as a cmake project? (y)es/(n)o");
 					var response = Console.ReadKey().KeyChar.ToString();
@@ -384,10 +384,10 @@ namespace SubCheck
 						}
 						nbIssues += PerformCMakeAnalysis(zipDirectoryName, config);
 					}
-					else
-					{
-						nbIssues += PerformVSAnalysis(zipDirectoryName, config);
-					}
+				}
+				else
+				{
+					nbIssues += PerformVSAnalysis(zipDirectoryName, config);
 				}
 			}
 			catch (InvalidDataException)
