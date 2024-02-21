@@ -127,11 +127,6 @@ namespace SubCheck
 			match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
 			nbIssues += Assert(match.Success, "\tC++ Language Standard is c++20 or higher");
 
-			// warning level 4 + warnings treated as errors
-			pattern = @"^\s*target_compile_options\s*\(\s*\S+\s+(PRIVATE|PUBLIC)\s+\/W4\s+\/WX\s*\)";
-			match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
-			nbIssues += Assert(match.Success, "\tC++ Coding Standard #1 is respected: Warning Level is set to 4 or higher, warnings are treated as errors");
-
 			CreateVSSolutionFromCMake(config, Path.GetDirectoryName(cmakeListsFilePath));
 
 			PerformVSAnalysis(Path.Combine(cmakeListsFolder, "build"), config, true);
@@ -176,25 +171,32 @@ namespace SubCheck
 				RedirectStandardOutput = true,
 				CreateNoWindow = true,
 			};
-			using (var process = Process.Start(startInfo))
+			try
 			{
-				string versionPattern = @"cmake version (\d+\.\d+\.\d+)";
-				while (!process.StandardOutput.EndOfStream)
+				using (var process = Process.Start(startInfo))
 				{
-					string line = process.StandardOutput.ReadLine();
-					Match match = Regex.Match(line, versionPattern);
-
-					if (match.Success)
+					string versionPattern = @"cmake version (\d+\.\d+\.\d+)";
+					while (!process.StandardOutput.EndOfStream)
 					{
-						string versionString = match.Groups[1].Value;
-						if (Version.TryParse(versionString, out Version version))
+						string line = process.StandardOutput.ReadLine();
+						Match match = Regex.Match(line, versionPattern);
+
+						if (match.Success)
 						{
-							Console.WriteLine($"CMake version: {version}");
-							config.SetCMakeVersion(version);
-							result = version >= config.MinCMakeVersion;
+							string versionString = match.Groups[1].Value;
+							if (Version.TryParse(versionString, out Version version))
+							{
+								Console.WriteLine($"CMake version: {version}");
+								config.SetCMakeVersion(version);
+								result = version >= config.MinCMakeVersion;
+							}
 						}
 					}
 				}
+			}
+			catch (Win32Exception)
+			{
+				Console.WriteLine($"No cmake installation available - is cmake installed and the installation path in your PATH variable?");
 			}
 			return result;
 		}
@@ -375,13 +377,13 @@ namespace SubCheck
 							Console.ReadKey();
 							return;
 						}
-						bool codeAvailable = VerifyCode(config);
-						if (!codeAvailable)
-						{
-							Console.WriteLine($"Code {config.MinCodeVersion} or later was not found!.");
-							Console.ReadKey();
-							return;
-						}
+						//bool codeAvailable = VerifyCode(config);
+						//if (!codeAvailable)
+						//{
+						//	Console.WriteLine($"Code {config.MinCodeVersion} or later was not found!.");
+						//	Console.ReadKey();
+						//	return;
+						//}
 						nbIssues += PerformCMakeAnalysis(zipDirectoryName, config);
 					}
 				}
