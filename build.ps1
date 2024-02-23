@@ -1,6 +1,8 @@
 dotnet tool install -g GitVersion.Tool --version 5.* -v q
 $GITVERSION = dotnet-gitversion /updateassemblyinfo | ConvertFrom-Json 
 
+echo $GITVERSION
+
 msbuild /property:Configuration=Release
 
 $ILMERGE_VERSION = "3.0.29"
