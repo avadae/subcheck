@@ -265,7 +265,9 @@ namespace SubCheck
 			{
 				var projectPath = Path.Combine(solutionDirectoryName, projectInSolution.RelativePath);
 				var projectName = Path.GetFileNameWithoutExtension(projectPath);
-				if (projectName == "ALL_BUILD" || projectName == "ZERO_CHECK" || projectName == "CMakePredefinedTargets")
+
+				// ignore cmake projects
+				if (projectName == "ALL_BUILD" || projectName == "ZERO_CHECK" || projectName == "INSTALL" || projectName == "CMakePredefinedTargets")
 					continue;
 
 				nbIssues += CheckCleanFolder(Path.GetDirectoryName(projectPath));
@@ -292,11 +294,14 @@ namespace SubCheck
 				!string.IsNullOrEmpty(config.DevenvPath) &&	File.Exists(config.DevenvPath))
 			{
 
-				if (config.BuildAfterReport)
+				if (config.BuildAfterReport || config.QuickBuildAfterReport)
 				{
 					foreach (var configuration in solution.SolutionConfigurations)
 					{
 						if (configuration.ConfigurationName != "Debug" && configuration.ConfigurationName != "Release")
+							continue;
+
+						if(config.QuickBuildAfterReport && (configuration.ConfigurationName != "Debug" || configuration.PlatformName != "x64"))
 							continue;
 
 						try
@@ -385,6 +390,10 @@ namespace SubCheck
 						//	return;
 						//}
 						nbIssues += PerformCMakeAnalysis(zipDirectoryName, config);
+					}
+					else
+					{
+						nbIssues += PerformVSAnalysis(zipDirectoryName, config);
 					}
 				}
 				else

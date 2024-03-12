@@ -15,6 +15,7 @@ namespace SubCheck
 		public string DevenvPath => System.IO.Path.Combine(vsPath,"Common7\\IDE\\devenv.exe");
 		public string MsBuildPath => System.IO.Path.Combine(vsPath, "MSBuild\\Current\\Bin\\MsBuild.exe");
 		public bool BuildAfterReport { get; set; }
+		public bool QuickBuildAfterReport { get; set; }
 		public bool OpenVSAfterReport { get; set; }
 		public int VSMajorVersionNumber { get; set; } = 17;
 		public string PlatformToolsetVersion { get; set; } = "v143";
