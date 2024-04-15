@@ -123,7 +123,7 @@ namespace SubCheck
 			}
 
 			// c++20 enabled
-			pattern = @"^\s*target_compile_features\s*\(\s*\S+\s+(PRIVATE|PUBLIC)\s+cxx_std_20\s*\)";
+			pattern = @"^\s*target_compile_features\s*\(\s*\S+\s+(PRIVATE|PUBLIC|INTERFACE)\s+cxx_std_20\s*\)";
 			match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
 			nbIssues += Assert(match.Success, "\tC++ Language Standard is c++20 or higher");
 
