@@ -301,7 +301,7 @@ namespace SubCheck
 						if (configuration.ConfigurationName != "Debug" && configuration.ConfigurationName != "Release")
 							continue;
 
-						if(config.QuickBuildAfterReport && (configuration.ConfigurationName != "Debug" || configuration.PlatformName != "x64"))
+						if(config.QuickBuildAfterReport && (configuration.ConfigurationName != config.QuickBuildTarget || configuration.PlatformName != "x64"))
 							continue;
 
 						try
@@ -409,14 +409,23 @@ namespace SubCheck
 			{
 				nbIssues += Fail($"Unzip into {zipDirectoryName}");
 			}
+			catch (IOException)
+			{
+				nbIssues += Fail($"Delete {zipDirectoryName}");
+			}
+
+			try
+			{
+				if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport && Directory.Exists(zipDirectoryName))
+					Directory.Delete(zipDirectoryName, true);
+			}
+			catch (IOException)
+			{
+				nbIssues += Fail($"Delete {zipDirectoryName}");
+			}
 
 			Console.WriteLine($"Found {nbIssues} issue(s).");
-
-			Console.WriteLine("Done, press a key to close."); 
-			
-			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport && Directory.Exists(zipDirectoryName))
-				Directory.Delete(zipDirectoryName, true);
-
+			Console.WriteLine("Done, press a key to close.");
 			Console.ReadKey();
 		}
 
