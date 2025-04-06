@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Definition;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Exceptions;
 using Microsoft.Build.Locator;
 using Microsoft.Win32;
 
@@ -21,14 +22,11 @@ namespace SubCheck
 		private static void Main(string[] args)
 		{
 			Console.WriteLine($"Submission Checker v{Assembly.GetExecutingAssembly().GetName().Version}");
+			bool singleFileAnalysis = true;
 
 			#region validate input
 			if (args.Length == 0)
-			{
-				Console.WriteLine("Usage: SubCheck filename");
-				Console.ReadKey();
-				return;
-			}
+				singleFileAnalysis = false;
 
 			// concatenate all the args, because it's probably a filepath containing spaces that was given.
 			string totalArgs = args[0];
@@ -90,7 +88,17 @@ namespace SubCheck
 
 			#endregion
 
-			PerformAnalysis(filename, config);
+			if(singleFileAnalysis)
+				PerformAnalysis(filename, config, false);
+			else
+			{
+				config.OpenVSAfterReport = false;
+				string[] files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.zip");
+				foreach (var file in files)
+				{
+					PerformAnalysis(file, config, true);
+				}
+			}
 		}
 
 		public static int PerformCMakeAnalysis(string directoryName, Config config)
@@ -260,7 +268,18 @@ namespace SubCheck
 			nbIssues += CheckCleanFolder(solutionDirectoryName);
 
 			ProjectCollection projects = new ProjectCollection();
-			var solution = SolutionFile.Parse(Path.GetFullPath(solutionFileName));
+			
+			SolutionFile solution = null;
+			try
+			{
+				solution = SolutionFile.Parse(Path.GetFullPath(solutionFileName));
+			}
+			catch (InvalidProjectFileException)
+			{
+				nbIssues += Fail($"Exception occured when parsing the solution file {solutionFileName}, the solution is invalid.");
+				return nbIssues;
+			}
+
 			foreach (var projectInSolution in solution.ProjectsInOrder)
 			{
 				var projectPath = Path.Combine(solutionDirectoryName, projectInSolution.RelativePath);
@@ -283,10 +302,18 @@ namespace SubCheck
 					LoadSettings = ProjectLoadSettings.IgnoreMissingImports,
 					ProjectCollection = projects
 				};
-				var project = Project.FromFile(projectPath, options);
 
-				Console.WriteLine($"Analyzing {Path.GetFileName(projectPath)}");
-				nbIssues += AnalyzeProject(project);
+				try
+				{
+					var project = Project.FromFile(projectPath, options);
+
+					Console.WriteLine($"Analyzing {Path.GetFileName(projectPath)}");
+					nbIssues += AnalyzeProject(project);
+				}
+				catch(InvalidProjectFileException)
+				{
+					nbIssues += Fail($"Exception occured when parsing the project file of {projectName}, the project is invalid.");
+				}
 			}
 			projects.UnloadAllProjects();
 
@@ -352,7 +379,7 @@ namespace SubCheck
 			return nbIssues;
 		}
 
-		public static void PerformAnalysis(string filename, Config config)
+		public static void PerformAnalysis(string filename, Config config, bool ignoreCMake)
 		{
 			Console.WriteLine($"Analyzing {filename}");
 			int nbIssues = CheckName(filename);
@@ -370,6 +397,8 @@ namespace SubCheck
 				var cmakefiles = Directory.GetFiles(zipDirectoryName, "CMakeLists.txt", SearchOption.AllDirectories);
 				if (cmakefiles.Length > 0)
 				{
+					if(ignoreCMake)
+						return;
 					Console.WriteLine($"A cmake config file was found, treat this as a cmake project? (y)es/(n)o");
 					var response = Console.ReadKey().KeyChar.ToString();
 
@@ -433,8 +462,10 @@ namespace SubCheck
 		{
 			try
 			{
-				return File.ReadLines(logFileName).First(s =>
+				var result = File.ReadLines(logFileName).First(s =>
 					Regex.Match(s, "^=+ Rebuild All: \\d succeeded, \\d failed, \\d skipped =+").Success);
+
+				return result;
 			}
 			catch (InvalidOperationException ioe)
 			{
