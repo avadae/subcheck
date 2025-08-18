@@ -43,5 +43,16 @@ namespace SubCheck
 				writer.Flush();
 			}
 		}
+
+		public static void Close()
+		{
+			foreach (var writer in Writers)
+			{
+				writer.Flush();
+				if (writer is IDisposable disposableWriter)
+					disposableWriter.Dispose();
+			}
+			Writers.Clear();
+		}
 	}
 }

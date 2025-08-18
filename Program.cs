@@ -465,9 +465,10 @@ namespace SubCheck
 			{
 				nbIssues += Fail($"Unzip into {zipDirectoryName}");
 			}
-			catch (IOException)
+			catch (IOException ioe)
 			{
-				nbIssues += Fail($"Delete {zipDirectoryName}");
+				Console.WriteLine($"IOException when unzipping {filename} into {zipDirectoryName}: {ioe.Message}");
+				nbIssues += Fail($"Delete/Unzip {zipDirectoryName}");
 			}
 
 			try
@@ -485,6 +486,7 @@ namespace SubCheck
 
 			if (singleFileAnalysis)
 			{
+				Logger.Close();
 				Console.WriteLine("Done, press a key to close.");
 				Console.ReadKey();
 			}
@@ -598,7 +600,7 @@ namespace SubCheck
 			nbIssues += Directory.Exists(Path.Combine(folder, "x64")) ? 1 : 0;
 			nbIssues += Directory.Exists(Path.Combine(folder, ".vs")) ? 1 : 0;
 			nbIssues += Directory.Exists(Path.Combine(folder, ".git")) ? 1 : 0;
-			nbIssues += Directory.Exists(Path.Combine(folder, "build")) ? 1 : 0;
+			nbIssues += Directory.Exists(Path.Combine(folder, "build")) ? 1 : 0;  // common cmake output folder
 			Assert(nbIssues == 0, $"Folder {folder} is clean");
 			return nbIssues;
 		}
