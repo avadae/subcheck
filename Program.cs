@@ -153,7 +153,14 @@ namespace SubCheck
 			// c++20 enabled
 			pattern = @"^\s*target_compile_features\s*\(\s*\S+\s+(PRIVATE|PUBLIC|INTERFACE)\s+cxx_std_20\s*\)";
 			match = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
-			nbIssues += Assert(match.Success, "\tC++ Language Standard is c++20 or higher");
+
+			pattern = @"^\s*set\s*\(\s*CMAKE_CXX_STANDARD\s+(\d+)\s*\)";
+			var match2 = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
+			pattern = @"^\s*set\s*\(\s*CMAKE_CXX_STANDARD_REQUIRED ON))";
+			var match3 = Regex.Match(cmakeListsContent, pattern, RegexOptions.Multiline);
+
+			bool correct = match.Success || (match2.Success && match3.Success);
+			nbIssues += Assert(correct, "\tC++ Language Standard is c++20 or higher");
 
 			CreateVSSolutionFromCMake(config, Path.GetDirectoryName(cmakeListsFilePath));
 
