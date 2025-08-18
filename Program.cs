@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Build.Construction;
 using Microsoft.Build.Definition;
 using Microsoft.Build.Evaluation;
+using Microsoft.Build.Exceptions;
 using Microsoft.Build.Locator;
 using Microsoft.Win32;
 
@@ -18,30 +19,20 @@ namespace SubCheck
 	{
 		private static Config config = new Config();
 
+		private static bool singleFileAnalysis = true;
+
+		private static Report report = new Report();
+
 		private static void Main(string[] args)
 		{
-			Console.WriteLine($"Submission Checker v{Assembly.GetExecutingAssembly().GetName().Version}");
+			var fileWriter = new StreamWriter("log.txt", append: false);
+			Logger.AddWriter(fileWriter);
+			Logger.WriteLine($"Submission Checker v{Assembly.GetExecutingAssembly().GetName().Version}");
 
 			#region validate input
 			if (args.Length == 0)
-			{
-				Console.WriteLine("Usage: SubCheck filename");
-				Console.ReadKey();
-				return;
-			}
+				singleFileAnalysis = false;
 
-			// concatenate all the args, because it's probably a filepath containing spaces that was given.
-			string totalArgs = args[0];
-			for (int i = 1; i < args.Length; i++)
-				totalArgs += " " + args[i];
-
-			var filename = Path.GetFullPath(totalArgs);
-			if (!File.Exists(filename))
-			{
-				Console.WriteLine($"Failed to find {filename}");
-				Console.ReadKey();
-				return;
-			}
 			string exeLocation = Path.GetDirectoryName(Assembly.GetEntryAssembly().Location);
 			Directory.SetCurrentDirectory(exeLocation);
 			string configPath = Path.GetFullPath("config.xml");
@@ -71,7 +62,7 @@ namespace SubCheck
 				{
 					MSBuildLocator.RegisterMSBuildPath(instance.MSBuildPath);
 					config.SetVisualStudioPath(instance.VisualStudioRootPath);
-					Console.WriteLine($"Using {instance.Name} to build and analyze - version {instance.Version}");
+					Logger.WriteLine($"Using {instance.Name} to build and analyze - version {instance.Version}");
 					break;
 				}
 			}
@@ -90,7 +81,44 @@ namespace SubCheck
 
 			#endregion
 
-			PerformAnalysis(filename, config);
+			if (singleFileAnalysis)
+			{
+				// concatenate all the args, because it's probably a filepath containing spaces that was given.
+				string totalArgs = args[0];
+				for (int i = 1; i < args.Length; i++)
+					totalArgs += " " + args[i];
+
+				var filename = Path.GetFullPath(totalArgs);
+				if (!File.Exists(filename))
+				{
+					Console.WriteLine($"Failed to find {filename}");
+					Console.ReadKey();
+					return;
+				}
+
+				PerformAnalysis(filename, config);
+			}
+			else
+			{
+				using (var csvWriter = new StreamWriter("report.csv", append: false))
+				{
+					csvWriter.WriteLine("Filename,Type,# Projects Build,# Projects Fail,# Issues");
+					csvWriter.Flush();
+
+					config.OpenVSAfterReport = false;
+					string[] files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.zip");
+					foreach (var file in files)
+					{
+						report = new Report
+						{
+							filename = Path.GetFileName(file),
+						};
+						PerformAnalysis(file, config);
+						csvWriter.WriteLine($"{report.filename},{report.projectType},{report.nbSuccessfulBuilds},{report.nbFailedBuilds},{report.nbIssues}");
+						csvWriter.Flush();
+					}
+				}
+			}
 		}
 
 		public static int PerformCMakeAnalysis(string directoryName, Config config)
@@ -102,7 +130,7 @@ namespace SubCheck
 			string cmakeListsContent = ReadFile(cmakeListsFilePath);
 			string cmakeListsFolder = Path.GetDirectoryName(cmakeListsFilePath);
 
-			Console.WriteLine($"Analyzing {cmakeListsFolder}");
+			Logger.WriteLine($"Analyzing {cmakeListsFolder}");
 
 			nbIssues += CheckCleanFolder(cmakeListsFolder);
 
@@ -218,7 +246,7 @@ namespace SubCheck
 			};
 			using (var process = Process.Start(startInfo))
 			{
-				Console.WriteLine($"Creating build files in {Path.Combine(directoryName, "build")}");
+				Logger.WriteLine($"Creating build files in {Path.Combine(directoryName, "build")}");
 				process.WaitForExit();
 			}
 		}
@@ -267,7 +295,18 @@ namespace SubCheck
 			nbIssues += CheckCleanFolder(solutionDirectoryName);
 
 			ProjectCollection projects = new ProjectCollection();
-			var solution = SolutionFile.Parse(Path.GetFullPath(solutionFileName));
+			
+			SolutionFile solution;
+			try
+			{
+				solution = SolutionFile.Parse(Path.GetFullPath(solutionFileName));
+			}
+			catch (InvalidProjectFileException)
+			{
+				nbIssues += Fail($"Exception occured when parsing the solution file {solutionFileName}, the solution is invalid.");
+				return nbIssues;
+			}
+
 			foreach (var projectInSolution in solution.ProjectsInOrder)
 			{
 				var projectPath = Path.Combine(solutionDirectoryName, projectInSolution.RelativePath);
@@ -290,10 +329,18 @@ namespace SubCheck
 					LoadSettings = ProjectLoadSettings.IgnoreMissingImports,
 					ProjectCollection = projects
 				};
-				var project = Project.FromFile(projectPath, options);
 
-				Console.WriteLine($"Analyzing {Path.GetFileName(projectPath)}");
-				nbIssues += AnalyzeProject(project);
+				try
+				{
+					var project = Project.FromFile(projectPath, options);
+
+					Logger.WriteLine($"Analyzing {Path.GetFileName(projectPath)}");
+					nbIssues += AnalyzeProject(project);
+				}
+				catch(InvalidProjectFileException)
+				{
+					nbIssues += Fail($"Exception occured when parsing the project file of {projectName}, the project is invalid.");
+				}
 			}
 			projects.UnloadAllProjects();
 
@@ -308,7 +355,7 @@ namespace SubCheck
 						if (configuration.ConfigurationName != "Debug" && configuration.ConfigurationName != "Release")
 							continue;
 
-						if(config.QuickBuildAfterReport && (configuration.ConfigurationName != "Debug" || configuration.PlatformName != "x64"))
+						if(config.QuickBuildAfterReport && (configuration.ConfigurationName != config.QuickBuildTarget || configuration.PlatformName != "x64"))
 							continue;
 
 						try
@@ -317,7 +364,7 @@ namespace SubCheck
 								$"build_{configuration.ConfigurationName}_{configuration.PlatformName}.log";
 							if (File.Exists(logFilename))
 								File.Delete(logFilename);
-							Console.WriteLine($"Building {configuration.FullName}");
+							Logger.WriteLine($"Building {configuration.FullName}");
 							ProcessStartInfo startInfo = new ProcessStartInfo(config.DevenvPath)
 							{
 								UseShellExecute = true,
@@ -329,7 +376,14 @@ namespace SubCheck
 							var process = Process.Start(startInfo);
 							process.WaitForExit();
 
-							Console.WriteLine(GetBuildResult(logFilename));
+							var buildResult = GetBuildResult(logFilename);
+							var result = ParseBuildResult(buildResult);
+							if (result != null)
+							{
+								Logger.WriteLine($"Succeeded: {result.Value.succeeded}, Failed: {result.Value.failed}, Skipped: {result.Value.skipped}");
+							}
+							report.nbSuccessfulBuilds += result?.succeeded ?? 0;
+							report.nbFailedBuilds += result?.failed ?? 0;
 						}
 						catch (Win32Exception ex)
 						{
@@ -359,9 +413,23 @@ namespace SubCheck
 			return nbIssues;
 		}
 
+		private static (int succeeded, int failed, int skipped)? ParseBuildResult(string buildResult)
+		{
+			// Regex: matches the three numbers in the expected order
+			var match = Regex.Match(buildResult, @"Rebuild All:\s+(\d+)\s+succeeded,\s+(\d+)\s+failed,\s+(\d+)\s+skipped");
+			if (match.Success)
+			{
+				int succeeded = int.Parse(match.Groups[1].Value);
+				int failed = int.Parse(match.Groups[2].Value);
+				int skipped = int.Parse(match.Groups[3].Value);
+				return (succeeded, failed, skipped);
+			}
+			return null;
+		}
+
 		public static void PerformAnalysis(string filename, Config config)
 		{
-			Console.WriteLine($"Analyzing {filename}");
+			Logger.WriteLine($"Analyzing {filename}");
 			int nbIssues = CheckName(filename);
 
 			string zipDirectoryName = Path.GetFileNameWithoutExtension(filename);
@@ -375,36 +443,24 @@ namespace SubCheck
 				ZipFile.ExtractToDirectory(filename, zipDirectoryName);
 
 				var cmakefiles = Directory.GetFiles(zipDirectoryName, "CMakeLists.txt", SearchOption.AllDirectories);
-				if (cmakefiles.Length > 0)
+				var vsfiles = Directory.GetFiles(zipDirectoryName, "*.sln", SearchOption.AllDirectories);
+				if (cmakefiles.Length > 0 && vsfiles.Length == 0)
 				{
-					Console.WriteLine($"A cmake config file was found, treat this as a cmake project? (y)es/(n)o");
-					var response = Console.ReadKey().KeyChar.ToString();
-
-					if (response.ToLower() == "yes" || response.ToLower() == "y")
+					Console.WriteLine($"Found {cmakefiles.Length} CMakeLists.txt file(s) and no .sln file, assuming this is a cmake project.");
+					// there is a cmake config file and no vs solution, we assume this is a cmake project.
+					bool cmakeAvailable = VerifyCMake(config);
+					if (!cmakeAvailable)
 					{
-						bool cmakeAvailable = VerifyCMake(config);
-						if (!cmakeAvailable)
-						{
-							Console.WriteLine($"CMake {config.MinCMakeVersion} or later was not found!.");
-							Console.ReadKey();
-							return;
-						}
-						//bool codeAvailable = VerifyCode(config);
-						//if (!codeAvailable)
-						//{
-						//	Console.WriteLine($"Code {config.MinCodeVersion} or later was not found!.");
-						//	Console.ReadKey();
-						//	return;
-						//}
-						nbIssues += PerformCMakeAnalysis(zipDirectoryName, config);
+						Console.WriteLine($"CMake {config.MinCMakeVersion} or later was not found!.");
+						Console.ReadKey();
+						return;
 					}
-					else
-					{
-						nbIssues += PerformVSAnalysis(zipDirectoryName, config);
-					}
+					report.projectType = "CMake";
+					nbIssues += PerformCMakeAnalysis(zipDirectoryName, config);
 				}
 				else
 				{
+					report.projectType = "Visual Studio";
 					nbIssues += PerformVSAnalysis(zipDirectoryName, config);
 				}
 			}
@@ -416,23 +472,39 @@ namespace SubCheck
 			{
 				nbIssues += Fail($"Unzip into {zipDirectoryName}");
 			}
+			catch (IOException)
+			{
+				nbIssues += Fail($"Delete {zipDirectoryName}");
+			}
 
-			Console.WriteLine($"Found {nbIssues} issue(s).");
+			try
+			{
+				if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport && Directory.Exists(zipDirectoryName))
+					Directory.Delete(zipDirectoryName, true);
+			}
+			catch (IOException)
+			{
+				nbIssues += Fail($"Delete {zipDirectoryName}");
+			}
 
-			Console.WriteLine("Done, press a key to close."); 
-			
-			if (config.UseTempFolderForAnalysis && !config.OpenVSAfterReport && Directory.Exists(zipDirectoryName))
-				Directory.Delete(zipDirectoryName, true);
+			Logger.WriteLine($"Found {nbIssues} issue(s).");
+			report.nbIssues = nbIssues;
 
-			Console.ReadKey();
+			if (singleFileAnalysis)
+			{
+				Console.WriteLine("Done, press a key to close.");
+				Console.ReadKey();
+			}
 		}
 
 		private static string GetBuildResult(string logFileName)
 		{
 			try
 			{
-				return File.ReadLines(logFileName).First(s =>
+				var result = File.ReadLines(logFileName).First(s =>
 					Regex.Match(s, "^=+ Rebuild All: \\d succeeded, \\d failed, \\d skipped =+").Success);
+
+				return result;
 			}
 			catch (InvalidOperationException ioe)
 			{
@@ -451,7 +523,7 @@ namespace SubCheck
 				if (configurationName != "Debug" && configurationName != "Release")
 					continue;
 
-				Console.WriteLine($"\tConfiguration {configuration.EvaluatedInclude}");
+				Logger.WriteLine($"\tConfiguration {configuration.EvaluatedInclude}");
 
 				project.SetGlobalProperty("Configuration", configuration.GetMetadataValue("Configuration"));
 				project.SetGlobalProperty("Platform", configuration.GetMetadataValue("Platform"));
@@ -576,21 +648,21 @@ namespace SubCheck
 
 		private static int Success(string desc)
 		{
-			Console.Write($"{desc}....");
+			Logger.Write($"{desc}....");
 			Console.ForegroundColor = ConsoleColor.Green;
-			Console.WriteLine("OK");
+			Logger.WriteLine("OK");
 			Console.ResetColor();
 			return 0;
 		}
 
 		private static int Fail(string desc, string reason = null)
 		{
-			Console.Write($"{desc}....");
+			Logger.Write($"{desc}....");
 			Console.ForegroundColor = ConsoleColor.Red;
 			if (!string.IsNullOrEmpty(reason))
-				Console.WriteLine($"NOK: {reason}");
+				Logger.WriteLine($"NOK: {reason}");
 			else
-				Console.WriteLine("NOK");
+				Logger.WriteLine("NOK");
 			Console.ResetColor();
 			return 1;
 		}
