@@ -18,20 +18,20 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
+      uses: microsoft/setup-msbuild@v3
     - name: Setup NuGet
-      uses: nuget/setup-nuget@v2
+      uses: nuget/setup-nuget@v3
     - name: Restore Packages
       run: nuget restore subcheck.sln
     - name: Build & Publish
       run: ./build.ps1
       shell: pwsh  
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: Executable
         path: ${{ github.workspace }}/SubCheck.exe
