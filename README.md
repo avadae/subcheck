@@ -10,16 +10,15 @@ Drag a zip file containing your submission onto subcheck.exe
 - Your zip file will be unzipped and the contents analyzed.
 
 Things that are checked (non exhaustive):
-- Visual Studio 2022 is installed
+- Visual Studio 2026 is installed
 - file is a zip file
 - filename matches with the given regex (see config.xml)
-- zip contains a vs2022 sln file
-- zip contains only one sln file
+- zip contains only one slnx file
 - verifies that the folders are clean - no intermediate build output or .vs folders
 - verifies that for each build target:
-    - the platform toolset is v143 (vs2022)
+    - the platform toolset is v145 (vs2026)
     - the warning level is set to 4 (if not it changes that)
     - warnings are treated as errors (if not it changes that)
-    - C++ Language Standard has been set to c++20
+    - C++ Language Standard has been set to c++20 or higher
 - if enabled, it will build all build targets
 - if enabled, it will open the solution
