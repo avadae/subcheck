@@ -621,11 +621,12 @@ namespace SubCheck
 				string line;
 				while ((line = reader.ReadLine()) != null)
 				{
-					if (Regex.IsMatch(line, "^VisualStudioVersion = \\d+\\.\\d+\\.\\d+\\.\\d+"))
+					var match = Regex.Match(line, @"^VisualStudioVersion\s*=\s*(\d+\.\d+\.\d+\.\d+)");
+					if (match.Success)
 					{
-						var parts = Regex.Split(line, "VisualStudioVersion = ");
-						var version = new Version(parts[1]);
-						return Assert(version.Major == config.VSMajorVersionNumber, $"Correct Visual Studio version ({config.VSMajorVersionNumber}): {version}");
+						var version = new Version(match.Groups[1].Value);
+						return Assert(version.Major == config.VSMajorVersionNumber,
+							$"Correct Visual Studio version ({config.VSMajorVersionNumber}): {version}");
 					}
 					else if(line == $"# Visual Studio Version {config.VSMajorVersionNumber}")
 					{
