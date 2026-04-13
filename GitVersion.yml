@@ -1,6 +1,3 @@
-mode: Mainline
-next-version: 1.0.4
-branches: {}
-ignore:
-  sha: []
-merge-message-formats: {}
+tag-prefix: '[vV]?'
+mode: ContinuousDelivery
+increment: None

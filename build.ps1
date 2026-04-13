@@ -12,6 +12,6 @@ $APP_NAME = "subcheck.exe"
 
 Install-Package ilmerge -RequiredVersion $ILMERGE_VERSION -Force -SkipValidate -Scope CurrentUser
 $pkg = Get-Package ilmerge -RequiredVersion $ILMERGE_VERSION
-$ILMERGE_PATH = Join-Path $pkg.Source "tools\net452\ILMerge.exe"
+$ILMERGE_PATH = Join-Path $pkg.Source "..\tools\net452\ILMerge.exe"
 
 Start-Process $ILMERGE_PATH -ArgumentList $ILMERGE_ARGS -Wait
