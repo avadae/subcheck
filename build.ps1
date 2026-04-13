@@ -5,10 +5,10 @@ echo $GITVERSION
 
 dotnet msbuild /property:Configuration=Release
 
+$APP_NAME = "subcheck.exe"
 $ILMERGE_VERSION = "3.0.29"
 $ILMERGE_BUILD = "Release"
 $ILMERGE_ARGS = "Bin\$ILMERGE_BUILD\$APP_NAME /lib:Bin\$ILMERGE_BUILD\ /out:$APP_NAME Microsoft.Build.Locator.dll"
-$APP_NAME = "subcheck.exe"
 
 Install-Package ilmerge -RequiredVersion $ILMERGE_VERSION -Force -SkipValidate -Scope CurrentUser
 $pkg = Get-Package ilmerge -RequiredVersion $ILMERGE_VERSION
