@@ -459,3 +459,5 @@ $RECYCLE.BIN/
 *.log
 config.xml
 Properties/LaunchSettings.json
+log.txt
+report.csv

@@ -3,7 +3,7 @@ $GITVERSION = dotnet-gitversion /updateassemblyinfo | ConvertFrom-Json
 
 echo $GITVERSION
 
-msbuild /property:Configuration=Release
+dotnet msbuild /property:Configuration=Release
 
 $ILMERGE_VERSION = "3.0.29"
 Install-Package ilmerge -RequiredVersion $ILMERGE_VERSION -Force -SkipValidate -Scope CurrentUser

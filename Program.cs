@@ -58,7 +58,7 @@ namespace SubCheck
 			var instances = MSBuildLocator.QueryVisualStudioInstances();
 			foreach (var instance in instances)
 			{
-				if (instance.Version.Major == 17)
+				if (instance.Version.Major == 18)
 				{
 					MSBuildLocator.RegisterMSBuildPath(instance.MSBuildPath);
 					config.SetVisualStudioPath(instance.VisualStudioRootPath);
@@ -285,7 +285,7 @@ namespace SubCheck
 
 		public static int PerformVSAnalysis(string directoryName, Config config, bool isCMakeProject = false)
 		{
-			var files = Directory.GetFiles(directoryName, "*.sln", SearchOption.AllDirectories);
+			var files = Directory.GetFiles(directoryName, "*.sln*", SearchOption.AllDirectories);
 			int nbIssues = isCMakeProject ? 0 : Assert(files.Length == 1, "Found exactly one solution", $" - found {files.Length} solutions.");
 			if (files.Length == 0) // let's assume the first one is the correct one.
 				return nbIssues;
@@ -540,7 +540,7 @@ namespace SubCheck
 
 				var languageStandard = compilerSettings.GetMetadata("LanguageStandard");
 				bool languageStandardIsOK = languageStandard != null &&
-					(languageStandard.EvaluatedValue == "stdcpp20" || languageStandard.EvaluatedValue == "stdcpplatest");
+					(languageStandard.EvaluatedValue == "stdcpp20" || languageStandard.EvaluatedValue == "stdcpp23" || languageStandard.EvaluatedValue == "stdcpplatest");
 				nbIssues += Assert(languageStandardIsOK, "\t\tC++ Language Standard is c++20 or higher");
 
 				var warningLevel = compilerSettings.GetMetadata("WarningLevel");
@@ -614,6 +614,8 @@ namespace SubCheck
 
 		private static int CheckSlnVersion(string filename)
 		{
+			if(filename.Contains(".slnx")) // slnx files do not contain a version number
+				return 0;
 			using (StreamReader reader = new StreamReader(filename))
 			{
 				string line;
